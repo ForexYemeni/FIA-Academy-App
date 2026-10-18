@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">أكاديمية المستقبل الدولية</string>
+    <string name="offline_title">لا يوجد اتصال بالإنترنت</string>
+    <string name="offline_message">تعذر تحميل الصفحة — تحقق من اتصالك بالشبكة ثم أعد المحاولة</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="app_tagline">FUTURE INTERNATIONAL ACADEMY</string>
+
+    <!-- إشعارات التطبيق -->
+    <string name="notif_channel_name">إشعارات الأكاديمية</string>
+    <string name="notif_channel_desc">إشعارات الدورات والتحديثات الجديدة في الأكاديمية</string>
+    <string name="notif_fallback_title">إشعار جديد</string>
+    <string name="notif_fallback_body">افتح التطبيق لعرض التفاصيل</string>
+    <string name="notif_summary_title">إشعارات جديدة في الأكاديمية</string>
+
+    <!-- خدمة الاستلام الفوري -->
+    <string name="service_channel_name">خدمة الإشعارات الفورية</string>
+    <string name="service_channel_desc">تحفظ عمل الإشعارات الفورية حتى والتطبيق مغلق</string>
+    <string name="service_notification_title">الإشعارات الفورية نشطة</string>
+    <string name="service_notification_text">ستصلك إشعارات الأكاديمية فور وصولها</string>
+
+    <!-- تقرير آخر عطل -->
+    <string name="crash_title">سجل آخر عطل في التطبيق</string>
+    <string name="crash_hint">أرسل لقطة شاشة لهذه الشاشة لمن بنى لك التطبيق — ثم اضغط «متابعة إلى التطبيق» للعمل بشكل طبيعي</string>
+    <string name="crash_continue">متابعة إلى التطبيق</string>
+    <string name="crash_close">إغلاق التطبيق</string>
+</resources>

@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// توقيع النسخة النهائية — بيانات الـ keystore في ملف keystore.properties
+// (ملف محلي بجانب هذا الملف — لا يُرفع لأي مستودع ولا يُضمَّن في التطبيق)
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('app/keystore.properties')
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+android {
+    namespace 'com.fiaacademy.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.fiaacademy.app'
+        minSdk 26
+        targetSdk 34
+        versionCode 14
+        versionName '2.4'
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.activity:activity-ktx:1.9.2'
+    // فحص الإشعارات الدوري في الخلفية
+    implementation 'androidx.work:work-runtime-ktx:2.9.1'
+}

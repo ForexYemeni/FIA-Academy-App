@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ثيم التطبيق — شاشة بداية عبر windowBackground (كلاسيكي، يعمل على كل الأجهزة) -->
+    <style name="Theme.FIA.App" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/fia_navy</item>
+        <item name="android:navigationBarColor">@color/fia_navy_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
+
+    <!-- زر إعادة المحاولة -->
+    <style name="FiaRetryButton" parent="Widget.AppCompat.Button">
+        <item name="android:background">@drawable/bg_retry_button</item>
+        <item name="android:textColor">@color/fia_white</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:paddingStart">40dp</item>
+        <item name="android:paddingEnd">40dp</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>
