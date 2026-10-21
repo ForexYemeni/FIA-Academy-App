@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="fia_navy">#334264</color>
-    <color name="fia_navy_dark">#26344F</color>
-    <color name="fia_gold">#D8A346</color>
+    <color name="fia_navy">#0A1F44</color>
+    <color name="fia_navy_dark">#051429</color>
+    <color name="fia_gold">#C9A961</color>
     <color name="fia_white">#FFFFFF</color>
     <color name="fia_gray_text">#5B6472</color>
     <color name="fia_icon_background">#FFFFFF</color>

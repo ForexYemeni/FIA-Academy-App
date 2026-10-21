@@ -452,7 +452,7 @@ class MainActivity : AppCompatActivity() {
             // أصوات إشعارات الموقع تعمل فور وصولها دون لمسة (مثل تطبيق حقيقي)
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            userAgentString = "$userAgentString FIAAcademyApp/2.6"
+            userAgentString = "$userAgentString FIAAcademyApp/2.7"
             cacheMode = WebSettings.LOAD_DEFAULT
         }
 

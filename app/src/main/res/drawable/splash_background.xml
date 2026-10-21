@@ -1,7 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/fia_white" />
+    <!-- v2.7 — خلفية كحلية فاخرة متدرجة مطابقة لهوية الموقع تماماً
+         (#0C2452 → #0A1F44 → #051429) بدل الأبيض السابق الذي كان
+         يقطع التجانس مع الصفحة الرئيسية الكحلية -->
     <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="270"
+                android:startColor="#0C2452"
+                android:centerColor="#0A1F44"
+                android:endColor="#051429" />
+        </shape>
+    </item>
+    <!-- شعار الأكاديمية في المنتصف (أزيلت خلفيته البيضاء برمجياً) -->
+    <item android:gravity="center">
         <bitmap
             android:gravity="center"
             android:src="@drawable/splash_icon" />
