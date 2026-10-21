@@ -24,4 +24,16 @@
     <string name="crash_hint">أرسل لقطة شاشة لهذه الشاشة لمن بنى لك التطبيق — ثم اضغط «متابعة إلى التطبيق» للعمل بشكل طبيعي</string>
     <string name="crash_continue">متابعة إلى التطبيق</string>
     <string name="crash_close">إغلاق التطبيق</string>
+
+    <!-- استمرار الإشعارات الفورية — إعفاء البطارية -->
+    <string name="battery_title">إشعارات فورية موثوقة</string>
+    <string name="battery_message">كي تصلك إشعارات الأكاديمية فوراً حتى والتطبيق مغلق تماماً، اسمح للتطبيق بالعمل دائماً في الخلفية — ضغطة واحدة فقط ولن يُسأل مجدداً.</string>
+    <string name="battery_continue">السماح الآن</string>
+    <string name="battery_later">لاحقاً</string>
+
+    <!-- تنزيل الشهادات إلى مجلد Fia academy -->
+    <string name="download_started">جارٍ التنزيل إلى مجلد Fia academy…</string>
+    <string name="download_saved">تم حفظ الملف في مجلد Fia academy</string>
+    <string name="download_failed">تعذر تنزيل الملف — حاول مجدداً</string>
+    <string name="storage_rationale">لحفظ الشهادات في مجلد Fia academy يلزم إذن التخزين</string>
 </resources>

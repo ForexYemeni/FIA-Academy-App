@@ -11,8 +11,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.graphics.Typeface
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.webkit.CookieManager
@@ -34,12 +36,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.IOException
 import java.util.ArrayDeque
+import org.json.JSONObject
 
 /**
  * أكاديمية المستقبل الدولية — غلاف WebView لموقع fiaacademy.vercel.app
@@ -162,6 +166,11 @@ class MainActivity : AppCompatActivity() {
     private var loadFailed = false
     private var pendingOpenUrl: String? = null
 
+    /** تنزيل مؤجل لحين منح إذن التخزين (أندرويد 8-9 فقط) */
+    private var pendingDownloadUrl: String? = null
+    private var pendingDownloadDisposition: String? = null
+    private var pendingDownloadMime: String? = null
+
     /** حارس إزعاج لجسر إشعارات الموقع: 6 كحدّ أقصى في الدقيقة */
     private val bridgeTimes = ArrayDeque<Long>()
 
@@ -179,6 +188,18 @@ class MainActivity : AppCompatActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* إشعارات الخلفية تبدأ فور المنح — لا شيء إضافي مطلوب */ }
+
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val url = pendingDownloadUrl
+        if (granted && url != null) {
+            FiaDownloads.enqueue(this, url, pendingDownloadDisposition, pendingDownloadMime)
+        }
+        pendingDownloadUrl = null
+        pendingDownloadDisposition = null
+        pendingDownloadMime = null
+    }
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -219,6 +240,8 @@ class MainActivity : AppCompatActivity() {
         askNotificationPermission()
         NotificationWorker.ensurePeriodic(this)
         NotificationWorker.kick(this)
+        // ضمان وصول الإشعارات حتى والتطبيق مغلق — طلب إعفاء البطارية مرة واحدة
+        uiHandler.postDelayed({ maybeAskBatteryExemption() }, 4000L)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -435,7 +458,7 @@ class MainActivity : AppCompatActivity() {
             // أصوات إشعارات الموقع تعمل فور وصولها دون لمسة (مثل تطبيق حقيقي)
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            userAgentString = "$userAgentString FIAAcademyApp/2.4"
+            userAgentString = "$userAgentString FIAAcademyApp/2.5"
             cacheMode = WebSettings.LOAD_DEFAULT
         }
 
@@ -510,6 +533,100 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
             }
+        }
+
+        // تنزيل الشهادات والملفات فورياً إلى مجلد Fia academy في التخزين
+        webView.setDownloadListener { url, _, contentDisposition, mimetype, _ ->
+            handleDownload(url, contentDisposition, mimetype)
+        }
+    }
+
+    /** تنزيل ملفات الموقع — يدعم http/https و data: ويحيل blob: إلى الجسر */
+    private fun handleDownload(url: String, disposition: String?, mime: String?) {
+        try {
+            when {
+                url.startsWith("blob:") -> fetchBlobAsBase64(url)
+                else -> {
+                    if (Build.VERSION.SDK_INT < 29 &&
+                        ContextCompat.checkSelfPermission(
+                            this, Manifest.permission.WRITE_EXTERNAL_STORAGE
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        // أندرويد 8-9: أذن أولاً ثم أنزّل فور المنح
+                        pendingDownloadUrl = url
+                        pendingDownloadDisposition = disposition
+                        pendingDownloadMime = mime
+                        Toast.makeText(this, R.string.storage_rationale, Toast.LENGTH_LONG).show()
+                        storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    } else {
+                        FiaDownloads.enqueue(this, url, disposition, mime)
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** الشهادات المولّدة داخل الصفحة (blob:) — تجلبها الصفحة وتسلّمها للجسر saveBase64 */
+    private fun fetchBlobAsBase64(blobUrl: String) {
+        try {
+            if (!::webView.isInitialized) return
+            val quoted = JSONObject.quote(blobUrl)
+            val js = """
+                (function(){
+                  try {
+                    fetch($quoted).then(function(r){ return r.blob(); }).then(function(b){
+                      var fr = new FileReader();
+                      fr.onload = function(){
+                        try {
+                          var mime = b.type || 'application/octet-stream';
+                          var map = {'application/pdf':'pdf','image/png':'png','image/jpeg':'jpg','image/webp':'webp'};
+                          var ext = map[mime] || (String(mime).split('/')[1] || 'bin').split('+')[0];
+                          var name = 'fia-' + Date.now() + '.' + ext;
+                          window.FiaApp && window.FiaApp.saveBase64 &&
+                            window.FiaApp.saveBase64(name, String(fr.result), mime);
+                        } catch(e) {}
+                      };
+                      fr.readAsDataURL(b);
+                    }).catch(function(){});
+                  } catch(e) {}
+                })();
+            """.trimIndent()
+            webView.evaluateJavascript(js, null)
+        } catch (ignored: Throwable) {
+        }
+    }
+
+    /**
+     * ضمان وصول الإشعارات الفورية حتى والتطبيق مغلق تماماً:
+     * طلب إعفاء التطبيق من قتل البطارية (Doze) — مرة واحدة فقط بموافقة المستخدم.
+     * هذا أكبر عامل موثوقية على أندرويد الرسمي؛ وقبل قتل الواجهات المخصصة (شاومي وغيرها)
+     * تظهر أيضاً شاشة النظام نفسها عند التفعيل.
+     */
+    private fun maybeAskBatteryExemption() {
+        try {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            if (pm.isIgnoringBatteryOptimizations(packageName)) return
+            val p = FiaNotifications.prefs(this)
+            if (p.getBoolean("battery_asked", false)) return
+            p.edit().putBoolean("battery_asked", true).apply()
+            AlertDialog.Builder(this)
+                .setTitle(R.string.battery_title)
+                .setMessage(R.string.battery_message)
+                .setPositiveButton(R.string.battery_continue) { _, _ ->
+                    runCatching {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:$packageName")
+                            )
+                        )
+                    }
+                }
+                .setNegativeButton(R.string.battery_later, null)
+                .show()
+        } catch (ignored: Throwable) {
         }
     }
 
@@ -677,6 +794,21 @@ class MainActivity : AppCompatActivity() {
         fun closeNotification(tag: String?) {
             if (tag.isNullOrBlank()) return
             FiaNotifications.cancel(this@MainActivity, tag.take(80), 1)
+        }
+
+        /**
+         * استلام ملفات الصفحة المولّدة داخلياً (شهادات blob: إنشاء في المتصفح)
+         * — dataUrl كامل (data:mime;base64,…) أو base64 مجرد — يُحفظ فوراً
+         * في مجلد Fia academy عبر FiaDownloads.
+         */
+        @JavascriptInterface
+        fun saveBase64(name: String?, dataUrl: String?, mime: String?) {
+            if (dataUrl.isNullOrBlank()) return
+            val safeName = if (name.isNullOrBlank())
+                "fia-${System.currentTimeMillis()}" else name.take(120)
+            FiaDownloads.saveBase64(
+                this@MainActivity, safeName, mime?.take(120), dataUrl.take(8_000_000)
+            )
         }
     }
 

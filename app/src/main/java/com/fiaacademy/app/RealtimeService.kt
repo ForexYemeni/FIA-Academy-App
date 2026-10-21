@@ -128,6 +128,19 @@ class RealtimeService : Service() {
         return START_STICKY
     }
 
+    /**
+     * سحب التطبيق من المهام الأخيرة: أعد إعلان الخدمة في المقدمة فوراً —
+     * الخدمة الأمامية تبقى حية على أندرويد الرسمي، وبعض الواجهات المخصصة
+     * (شاومي/هواوي وغيرها) تحاول قتلها هنا فنعاكم على الفور.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        try {
+            promoteForeground()
+        } catch (ignored: Throwable) {
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     /** الترقية للمقدمة — تعيد true فقط عند نجاحها الفعلي */
     private fun promoteForeground(): Boolean {
         // درس من كارثة v2.2/v2.3 على أندرويد 15:

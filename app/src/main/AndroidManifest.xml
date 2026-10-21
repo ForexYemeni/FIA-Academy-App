@@ -17,6 +17,13 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- حفظ التنزيلات (الشهادات) في مجلد Fia academy على أندرويد 8-9 فقط —
+         أندرويد 10+ يستخدم MediaStore بلا أي أذونات -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <!-- طلب إعفاء التطبيق من قتل البطارية كي تستمر الإشعارات الفورية والتطبيق مغلق -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <uses-feature
         android:name="android.hardware.camera"
