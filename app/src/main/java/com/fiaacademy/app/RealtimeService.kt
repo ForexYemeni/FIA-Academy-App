@@ -65,11 +65,26 @@ class RealtimeService : Service() {
     @Volatile
     private var screenOn = true
 
+    /** قفل إيقاظ جزئي — يُبقي المعالج صاحياً للفحص والشاشة مطفأة (بعد إعفاء البطارية فقط) */
+    private var wakeLock: PowerManager.WakeLock? = null
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                Intent.ACTION_SCREEN_ON -> screenOn = true
-                Intent.ACTION_SCREEN_OFF -> screenOn = false
+                Intent.ACTION_SCREEN_ON -> {
+                    screenOn = true
+                    // الإضاءة تعني استيقاظ المعالج طبيعياً — أطلق قفل الإيقاظ
+                    // وأوقف سلسلة المنبهات الاحتياطية (الخدمة الحية تفي)
+                    releaseWakeLock()
+                    FiaAlarmReceiver.cancelChain(this@RealtimeService)
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    screenOn = false
+                    // الشاشة انطأت — فعّل قفل الإيقاظ وسلسلة المنبهات الاحتياطية
+                    // (السلسلة تُحيي الفحص حتى لو قُتلت العملية لاحقاً)
+                    updateWakeLock()
+                    FiaAlarmReceiver.ensureChain(this@RealtimeService)
+                }
             }
         }
     }
@@ -106,6 +121,11 @@ class RealtimeService : Service() {
         } catch (ignored: Throwable) {
         }
 
+        // الشاشة مطفأة الآن؟ شغّل سلسلة المنبهات الاحتياطية فوراً،
+        // وإلا فالخدمة الحية تفي — وأي بدء جديد للخدمة سيصلح الحال
+        if (screenOn) FiaAlarmReceiver.cancelChain(this)
+        else FiaAlarmReceiver.ensureChain(this)
+
         scope.launch {
             // حلقة الفحص السريع — أي استثناء يُبتلع وتستمر الحلقة
             while (isActive) {
@@ -115,11 +135,43 @@ class RealtimeService : Service() {
                 }
                 if (FiaNotifications.getUserId(this@RealtimeService) == null) {
                     // لا حساب (لم يسجل دخول بعد) — أعد المحاولة لاحقاً بشكل خفيف
+                    releaseWakeLock()
                     delay(60_000L)
                     continue
                 }
+                updateWakeLock()
                 delay(if (screenOn) INTERVAL_SCREEN_ON_MS else INTERVAL_SCREEN_OFF_MS)
             }
+        }
+    }
+
+    /**
+     * درس v2.6: مع الشاشة مطفأة يُدخل النظام الجهاز في النوم العميق فيتجمد
+     * مؤقّت الحلقة ولا يصلك أي إشعار حتى تفتح التطبيق — وهذا بالضبط ما كان
+     * يحدث (الإشعارات تتجمع فجأة عند الفتح).
+     * الحل: قفل إيقاظ جزئي يُفعّل فقط بشرطين معاً: (شاشة مطفأة) + (إعفاء
+     * بطارية ممنوح من المستخدم) — ويُجدد تلقائياً كل دورة ويتحرر عند الإضاءة.
+     */
+    private fun updateWakeLock() {
+        try {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            if (!screenOn && FiaAlarmReceiver.isExempted(this)) {
+                if (wakeLock == null) {
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FIA:RealtimePoll")
+                }
+                // تجديد بصلاحية أطول من الدورة بأربعة أمثال — أي تجمد مؤقت يتعافى ذاتياً
+                wakeLock?.acquire(INTERVAL_SCREEN_OFF_MS * 4)
+            } else {
+                releaseWakeLock()
+            }
+        } catch (ignored: Throwable) {
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (ignored: Throwable) {
         }
     }
 
@@ -188,11 +240,14 @@ class RealtimeService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        releaseWakeLock()
         try {
             unregisterReceiver(screenReceiver)
         } catch (ignored: Throwable) {
         }
         scope.cancel()
+        // ملاحظة: سلسلة المنبهات تُترك تعمل عمداً — هي شبكة الأمان التي
+        // تُحيي الفحص حتى بعد قتل هذه الخدمة، وتُوقف نفسها عند الإضاءة
         super.onDestroy()
     }
 

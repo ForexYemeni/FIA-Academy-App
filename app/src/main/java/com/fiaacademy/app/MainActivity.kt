@@ -59,9 +59,6 @@ class MainActivity : AppCompatActivity() {
         private const val START_URL = "https://fiaacademy.vercel.app/"
         const val EXTRA_OPEN_URL = "fia_open_url"
 
-        /** تحديث تلقائي للمحتوى بعد غياب أطول من هذا — بلا خروج ودخول */
-        private const val AUTO_REFRESH_AFTER_MS = 2 * 60_000L
-
         /**
          * واجهة Notification كاملة تُحقن في كل صفحة قبل تفاعل المستخدم:
          * تعتمد الإذن محلياً وتحوّل إشعارات الموقع إلى إشعارات أندرويد حقيقية عبر جسر FiaApp.
@@ -174,9 +171,6 @@ class MainActivity : AppCompatActivity() {
     /** حارس إزعاج لجسر إشعارات الموقع: 6 كحدّ أقصى في الدقيقة */
     private val bridgeTimes = ArrayDeque<Long>()
 
-    private var bgAt = 0L
-    private var skipNextReload = false
-
     /** آخر عطل مسجّل من التشغيل السابق — يُعرض بدل الانهيار الصامت */
     private var lastCrashText: String? = null
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -247,7 +241,7 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         extractInternalUrl(intent)?.let { url ->
-            skipNextReload = true // فتح إشعار الآن — لا تُعِد تحميل الصفحة في onResume
+            // فتح إشعار الآن — انتقل للرابط مباشرة دون أي إعادة تحميل
             if (::webView.isInitialized) webView.loadUrl(url) else pendingOpenUrl = url
         }
     }
@@ -458,7 +452,7 @@ class MainActivity : AppCompatActivity() {
             // أصوات إشعارات الموقع تعمل فور وصولها دون لمسة (مثل تطبيق حقيقي)
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            userAgentString = "$userAgentString FIAAcademyApp/2.5"
+            userAgentString = "$userAgentString FIAAcademyApp/2.6"
             cacheMode = WebSettings.LOAD_DEFAULT
         }
 
@@ -472,6 +466,10 @@ class MainActivity : AppCompatActivity() {
 
         // جسر الموقع: إشعارات «new Notification» داخل الموقع تظهر كإشعارات أندرويد حقيقية
         webView.addJavascriptInterface(FiaBridge(), "FiaApp")
+
+        // جسر v2.6: الواجهة التي يتوقعها كود الشهادات في الموقع (FIANativeBridge) —
+        // حفظ فوري في المعرض باسم/جودة سليمين بدل الطريق البديل عبر blob
+        webView.addJavascriptInterface(FiaNativeBridge(), "FIANativeBridge")
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
@@ -807,8 +805,103 @@ class MainActivity : AppCompatActivity() {
             val safeName = if (name.isNullOrBlank())
                 "fia-${System.currentTimeMillis()}" else name.take(120)
             FiaDownloads.saveBase64(
-                this@MainActivity, safeName, mime?.take(120), dataUrl.take(8_000_000)
+                this@MainActivity, safeName, mime?.take(120), dataUrl.take(24_000_000)
             )
+        }
+    }
+
+    /**
+     * جسر v2.6 — الواجهة التي يتوقعها موقع الأكاديمية (certificate-viewer.tsx)
+     * لحفظ الشهادات مباشرة: الصور في المعرض (ألبوم Fia academy) وPDF في التنزيلات،
+     * بأسماء الملفات الصحيحة ودون الطريق البديل عبر blob، مع دعم التقسيمChunked
+     * لملفات base64 الكبيرة (حد واجهة JavascriptInterface العملي).
+     */
+    private inner class FiaNativeBridge {
+
+        @JavascriptInterface
+        fun saveImageToGallery(base64: String?, mime: String?, filename: String?): Boolean {
+            if (base64.isNullOrBlank()) return false
+            val name = if (filename.isNullOrBlank())
+                "FIA-Certificate-${System.currentTimeMillis()}.png" else filename.take(120)
+            return try {
+                val data = java.util.Base64.getDecoder().decode(base64.substringAfterLast(','))
+                FiaDownloads.saveImageToGallery(
+                    this@MainActivity, name, mime?.take(120) ?: "image/png", data, silent = true
+                )
+            } catch (t: Throwable) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun saveImageToGalleryChunked(chunksJson: String?, mime: String?, filename: String?): Boolean {
+            val base64 = joinChunks(chunksJson) ?: return false
+            return saveImageToGallery(base64, mime, filename)
+        }
+
+        @JavascriptInterface
+        fun savePdfToDownloads(base64: String?, filename: String?): Boolean {
+            if (base64.isNullOrBlank()) return false
+            val name = if (filename.isNullOrBlank())
+                "FIA-Certificate-${System.currentTimeMillis()}.pdf" else filename.take(120)
+            return try {
+                val data = java.util.Base64.getDecoder().decode(base64.substringAfterLast(','))
+                FiaDownloads.saveBytes(
+                    this@MainActivity, name, "application/pdf", data, silent = true
+                )
+            } catch (t: Throwable) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun savePdfToDownloadsChunked(chunksJson: String?, filename: String?): Boolean {
+            val base64 = joinChunks(chunksJson) ?: return false
+            return savePdfToDownloads(base64, filename)
+        }
+
+        @JavascriptInterface
+        fun showToast(message: String?, duration: String?) {
+            try {
+                val len = if (duration == "long") Toast.LENGTH_LONG else Toast.LENGTH_SHORT
+                Toast.makeText(
+                    this@MainActivity,
+                    message?.take(200) ?: "", len
+                ).show()
+            } catch (ignored: Throwable) {
+            }
+        }
+
+        @JavascriptInterface
+        fun vibrate(pattern: String?) {
+            try {
+                val vibe = if (Build.VERSION.SDK_INT >= 31) {
+                    (getSystemService(VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager).defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    getSystemService(VIBRATOR_SERVICE) as android.os.Vibrator
+                }
+                if (Build.VERSION.SDK_INT >= 26) {
+                    vibe.vibrate(android.os.VibrationEffect.createOneShot(60, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibe.vibrate(60)
+                }
+            } catch (ignored: Throwable) {
+            }
+        }
+
+        /** دمج مصفوفة أجزاء base64 المرسلة JSON من الموقع */
+        private fun joinChunks(chunksJson: String?): String? {
+            if (chunksJson.isNullOrBlank()) return null
+            return try {
+                val arr = org.json.JSONArray(chunksJson)
+                val sb = StringBuilder(arr.length() * 64)
+                for (i in 0 until arr.length()) sb.append(arr.getString(i))
+                sb.toString()
+            } catch (t: Throwable) {
+                null
+            }
         }
     }
 
@@ -828,7 +921,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        bgAt = System.currentTimeMillis()
         if (::webView.isInitialized) webView.onPause()
         CookieManager.getInstance().flush()
         super.onPause()
@@ -838,16 +930,9 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         if (::webView.isInitialized) {
             webView.onResume()
-            // محتوى الموقع محدّث بلمح البصر بعد كل عودة — بلا خروج ودخول
-            if (!skipNextReload && bgAt > 0 &&
-                System.currentTimeMillis() - bgAt >= AUTO_REFRESH_AFTER_MS
-            ) {
-                try {
-                    webView.reload()
-                } catch (ignored: Throwable) {
-                }
-            }
-            skipNextReload = false
+            // (v2.6) أُزيلت إعادة التحميل التلقائية عند العودة — كانت سبب «تحميل
+            // الصفحة الرئيسية مرتين» أمام المستخدم. الموقع حي بتحديثاته الفورية
+            // وخدمة الإشعارات مستقلة عن الواجهة تماماً.
             // ضمان خدمة الاستلام الفوري بعد جاهزية الواجهة تماماً —
             // بعيداً عن ثقل الإقلاع، وبلا أي خطر على فتح التطبيق مهما كانت سرعة الجهاز
             uiHandler.postDelayed({ RealtimeService.start(this@MainActivity) }, 2500L)

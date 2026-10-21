@@ -34,6 +34,7 @@
     <!-- تنزيل الشهادات إلى مجلد Fia academy -->
     <string name="download_started">جارٍ التنزيل إلى مجلد Fia academy…</string>
     <string name="download_saved">تم حفظ الملف في مجلد Fia academy</string>
+    <string name="gallery_saved">تم حفظ الشهادة في المعرض — ألبوم Fia academy ✓</string>
     <string name="download_failed">تعذر تنزيل الملف — حاول مجدداً</string>
     <string name="storage_rationale">لحفظ الشهادات في مجلد Fia academy يلزم إذن التخزين</string>
 </resources>

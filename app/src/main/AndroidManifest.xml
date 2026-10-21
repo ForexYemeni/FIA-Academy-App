@@ -24,6 +24,11 @@
         android:maxSdkVersion="28" />
     <!-- طلب إعفاء التطبيق من قتل البطارية كي تستمر الإشعارات الفورية والتطبيق مغلق -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- v2.6: بقاء الفحص حياً والشاشة مطفأة + سلسلة منبهات احتياطية حتى بعد قتل العملية -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -85,6 +90,12 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!-- v2.6: شبكة الأمان — سلسلة منبهات دقيقة تُحيي فحص الإشعارات
+             حتى لو قُتلت العملية كلياً بواسطة النظام أو واجهة مخصصة -->
+        <receiver
+            android:name=".FiaAlarmReceiver"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -3,6 +3,7 @@ package com.fiaacademy.app
 import android.app.DownloadManager
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -26,7 +27,12 @@ import java.util.Base64
  *     للجسر FiaApp.saveBase64 — ثم تُحفظ عبر MediaStore (أندرويد 10+) بلا أذونات،
  *     أو ملفاً مباشراً (أندرويد 8-9) بعد إذن التخزين.
  *
- * الوجهة النهائية: /storage/emulated/0/Download/Fia academy/<الملف>
+ * الوجهة النهائية:
+ *  • الصور (شهادات PNG/JPG): /storage/emulated/0/Pictures/Fia academy/ — تظهر
+ *    مباشرة في المعرض كألبوم باسم Fia academy (درس v2.6: مجلد Download لا تُفهرسه
+ *    تطبيقات المعرض — فكانت الشهادات تصل «بشكل غير مرتب» أو غير مرئية).
+ *  • ملفات PDF والمستندات: /storage/emulated/0/Download/Fia academy/
+ *  • روابط الشبكة (صور عادية إلخ): تُنزّل عبر DownloadManager إلى Download/Fia academy.
  */
 object FiaDownloads {
 
@@ -61,27 +67,96 @@ object FiaDownloads {
     }
 
     /**
-     * حفظ ملف قادم بترميز base64 (data: أو blob:) في مجلد Fia academy.
+     * حفظ ملف قادم بترميز base64 (data: أو blob:) — يوجّه تلقائياً:
+     * الصور إلى المعرض (Pictures/Fia academy) وغيرها إلى التنزيلات.
      * يقبل dataUrl كاملاً (data:mime;base64,xxxx) أو نص base64 مجرداً.
+     * @param silent إخفاء التوست المحلي (عندما يعرض الموقع توسته الخاص بالفعل)
      */
-    fun saveBase64(context: Context, fileName: String, mime: String?, encoded: String): Boolean {
+    fun saveBase64(
+        context: Context,
+        fileName: String,
+        mime: String?,
+        encoded: String,
+        silent: Boolean = false
+    ): Boolean {
         return try {
-            val raw = encoded.substringAfterLast(',')
-            val data = Base64.getDecoder().decode(raw)
+            val data = Base64.getDecoder().decode(encoded.substringAfterLast(','))
+            saveBytes(context, fileName, mime ?: "application/octet-stream", data, silent)
+        } catch (t: Throwable) {
+            if (!silent) {
+                Toast.makeText(context, R.string.download_failed, Toast.LENGTH_LONG).show()
+            }
+            false
+        }
+    }
+
+    /**
+     * حفظ بايتات جاهزة — نقطة الدخول الموحدة من الجسور:
+     * الصور إلى المعرض (Pictures/Fia academy) وغيرها إلى التنزيلات (Download/Fia academy).
+     */
+    fun saveBytes(
+        context: Context,
+        fileName: String,
+        mime: String,
+        data: ByteArray,
+        silent: Boolean = false
+    ): Boolean {
+        return try {
             val name = sanitize(fileName)
             val saved = if (Build.VERSION.SDK_INT >= 29) {
-                saveMediaStore(context, name, mime ?: "application/octet-stream", data)
+                saveMediaStore(context, name, mime, data)
             } else {
-                saveLegacyFile(name, data)
+                saveLegacyFile(context, name, data)
             }
-            Toast.makeText(
-                context,
-                if (saved) R.string.download_saved else R.string.download_failed,
-                Toast.LENGTH_LONG
-            ).show()
+            if (!silent) {
+                Toast.makeText(
+                    context,
+                    if (saved) {
+                        if (mime.startsWith("image/")) R.string.gallery_saved else R.string.download_saved
+                    } else R.string.download_failed,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
             saved
         } catch (t: Throwable) {
-            Toast.makeText(context, R.string.download_failed, Toast.LENGTH_LONG).show()
+            if (!silent) {
+                Toast.makeText(context, R.string.download_failed, Toast.LENGTH_LONG).show()
+            }
+            false
+        }
+    }
+
+    /**
+     * حفظ صورة في المعرض — المسار المفضل للشهادات من جسر FIANativeBridge.
+     * أندرويد 10+: MediaStore.Images بمسار Pictures/Fia academy (ألبوم مرئي فوراً).
+     * أندرويد 8-9: ملف مباشر في Pictures + فهرسة MediaScanner فورية.
+     */
+    fun saveImageToGallery(
+        context: Context,
+        fileName: String,
+        mime: String?,
+        data: ByteArray,
+        silent: Boolean = false
+    ): Boolean {
+        return try {
+            val name = sanitize(fileName)
+            val saved = if (Build.VERSION.SDK_INT >= 29) {
+                saveMediaStore(context, name, mime ?: "image/png", data, toGallery = true)
+            } else {
+                saveLegacyFile(context, name, data, toGallery = true)
+            }
+            if (!silent) {
+                Toast.makeText(
+                    context,
+                    if (saved) R.string.gallery_saved else R.string.download_failed,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            saved
+        } catch (t: Throwable) {
+            if (!silent) {
+                Toast.makeText(context, R.string.download_failed, Toast.LENGTH_LONG).show()
+            }
             false
         }
     }
@@ -113,18 +188,35 @@ object FiaDownloads {
         Toast.makeText(context, R.string.download_started, Toast.LENGTH_SHORT).show()
     }
 
-    /** أندرويد 10+: MediaStore (بلا أي أذونات) — الملف يظهر في Download/Fia academy */
-    private fun saveMediaStore(context: Context, name: String, mime: String, data: ByteArray): Boolean {
+    /**
+     * أندرويد 10+: MediaStore (بلا أي أذونات).
+     * الصور → Pictures/Fia academy (تظهر في المعرض فوراً) — البقية → Download/Fia academy.
+     */
+    private fun saveMediaStore(
+        context: Context,
+        name: String,
+        mime: String,
+        data: ByteArray,
+        toGallery: Boolean = false
+    ): Boolean {
         val resolver = context.contentResolver
+        val isImage = toGallery || mime.startsWith("image/")
+        val collection = if (isImage) {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        }
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
-            put(MediaStore.MediaColumns.RELATIVE_PATH,
-                Environment.DIRECTORY_DOWNLOADS + "/" + FOLDER_NAME)
+            put(
+                MediaStore.MediaColumns.RELATIVE_PATH,
+                (if (isImage) Environment.DIRECTORY_PICTURES else Environment.DIRECTORY_DOWNLOADS)
+                    + "/" + FOLDER_NAME
+            )
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: return false
+        val uri = resolver.insert(collection, values) ?: return false
         return try {
             resolver.openOutputStream(uri)?.use { it.write(data) } ?: return false
             val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
@@ -136,10 +228,17 @@ object FiaDownloads {
         }
     }
 
-    /** أندرويد 8-9: ملف مباشر في Download/Fia academy (بعد إذن WRITE_EXTERNAL_STORAGE) */
-    private fun saveLegacyFile(name: String, data: ByteArray): Boolean {
+    /** أندرويد 8-9: ملف مباشر (الصور في Pictures + فهرسة فورية، البقية في Download) */
+    private fun saveLegacyFile(
+        context: Context,
+        name: String,
+        data: ByteArray,
+        toGallery: Boolean = false
+    ): Boolean {
         @Suppress("DEPRECATION")
-        val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val root = Environment.getExternalStoragePublicDirectory(
+            if (toGallery) Environment.DIRECTORY_PICTURES else Environment.DIRECTORY_DOWNLOADS
+        )
         val dir = File(root, FOLDER_NAME)
         if (!dir.exists() && !dir.mkdirs() && !dir.isDirectory) return false
 
@@ -151,6 +250,15 @@ object FiaDownloads {
         while (target.exists()) target = File(dir, "$base (${i++})$ext")
 
         target.outputStream().use { it.write(data) }
+        // فهرسة فورية — تظهر الصورة في المعرض خلال ثوانٍ دون إعادة تشغيل
+        try {
+            MediaScannerConnection.scanFile(
+                context,
+                arrayOf(target.absolutePath),
+                arrayOf("image/*")
+            ) { _, _ -> }
+        } catch (ignored: Throwable) {
+        }
         return true
     }
 
