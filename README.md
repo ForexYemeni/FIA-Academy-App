@@ -8,9 +8,12 @@
 
 ## ⬇️ تحميل التطبيق
 
-**[تحميل أحدث إصدار (APK) من هنا — Releases](https://github.com/ForexYemeni/FIA-Academy-App/releases/latest/download/FIA-Academy.apk)**
+**[تحميل أحدث إصدار (APK) من هنا — Releases](https://github.com/ForexYemeni/FIA-Academy-App/releases/latest/download/Future-International-Academy-v2.7.1.apk)**
 
-## المميزات (حتى الإصدار v2.4)
+> التطبيق الرسمي الوحيد: **أكاديمية المستقبل الدولية — v2.7.1 (versionCode 19)**
+> يُثبَّت فوق النسخ السابقة مباشرة بنفس التوقيع النشط `fia-release-v3`.
+
+## المميزات (حتى الإصدار v2.7.1)
 
 - 🔔 **إشعارات فورية أصلية** — خدمة خلفية تفحص الإشعارات كل 5 ثوانٍ والشاشة مضاءة (30 ثانية مطفأة) حتى والتطبيق مغلق، مع إزالة تكرار ذكية
 - 🔐 جلسة دخول محفوظة بعد إغلاق التطبيق (Cookies + localStorage)
@@ -26,7 +29,7 @@
 | البند | القيمة |
 |---|---|
 | Package | `com.fiaacademy.app` |
-| الإصدار | 2.4 (versionCode 14) |
+| الإصدار | 2.7.1 (versionCode 19) |
 | الدعم | Android 8.0 (API 26) — Android 15 (targetSdk 34) |
 | التقنيات | Kotlin · AGP 8.7.3 · Gradle 8.10.2 · WorkManager 2.9.1 |
 | الموقع | https://fiaacademy.vercel.app (يُحمّل مباشرة — تحديثات الموقع تظهر فوراً داخل التطبيق دون تحديث APK) |
